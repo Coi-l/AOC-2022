@@ -33,6 +33,7 @@ struct Machine {
     xreg: isize,
     cycle: isize,
     current_operation: Option<Operation>,
+    screen: Vec<char>,
 }
 impl Machine {
     fn new() -> Machine {
@@ -41,6 +42,7 @@ impl Machine {
             xreg: 1,
             cycle: 1,
             current_operation: None,
+            screen: Vec::new(),
         }
     }
 
@@ -55,9 +57,26 @@ impl Machine {
         }
     }
 
+    fn draw_pixel(&self) -> bool {
+        let sprite_middle = self.xreg;
+        let cycle = (self.cycle - 1) % 40;
+        if cycle == sprite_middle - 1 || cycle == sprite_middle || cycle == sprite_middle + 1 {
+            return true;
+        }
+        false
+    }
+
     fn run_cycle(&mut self) -> bool {
+        //Write to screen
+        if self.draw_pixel() {
+            self.screen.push('#');
+        } else {
+            self.screen.push('.');
+        }
+
         if let Some(op) = &mut self.current_operation {
-            println!("Cycle: {}, xreg: {}, {:?}", self.cycle, self.xreg, op);
+            // println!("Cycle: {}, xreg: {}, {:?}", self.cycle, self.xreg, op);
+            //Perform op
             match op.instruction {
                 Instruction::Noop => op.cycles -= 1,
                 Instruction::Addx => {
@@ -142,6 +161,14 @@ fn main() {
 
     let sum: isize = ss.iter().sum();
     println!("Sum signal strengths: {}", sum);
+
+    machine.run_til_end();
+    for (index, c) in machine.screen.iter().enumerate() {
+        if index % 40 == 0 {
+            println!();
+        }
+        print!("{}", c);
+    }
 }
 
 #[test]
@@ -224,4 +251,19 @@ fn test_example_input() {
     machine.run_til_cycle(220);
     assert_eq!(machine.xreg, 18);
     assert_eq!(machine.signal_strenth(), 3960);
+}
+
+#[test]
+fn test_screen_output() {
+    let mut machine = Machine::new();
+    let ops = parse_instructions(get_file_reader("input-example"));
+    ops.iter().for_each(|op| machine.add_operation(*op));
+
+    machine.run_til_end();
+    for (index, c) in machine.screen.iter().enumerate() {
+        if index % 40 == 0 {
+            println!();
+        }
+        print!("{}", c);
+    }
 }
