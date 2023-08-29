@@ -18,47 +18,55 @@ impl Point {
         Point { x: 0, y: 0 }
     }
 
-    fn distance(&self, oth: &Point) -> Point {
-        let xabs = (oth.x - self.x).abs();
-        let yabs = (oth.y - self.y).abs();
+    fn move_points(&self, oth: &Point) -> Point {
+        let x = self.x - oth.x;
+        let y = self.y - oth.y;
+        let x = if x.abs() == 2 { x - (x / 2) } else { x };
+        let y = if y.abs() == 2 { y - (y / 2) } else { y };
+        Point { x, y }
+    }
+    fn abs_distance(&self, oth: &Point) -> Point {
+        let xabs = (self.x - oth.x).abs();
+        let yabs = (self.y - oth.y).abs();
         Point { x: xabs, y: yabs }
-        // xabs + yabs
     }
 }
-struct Tail {
+struct Knot {
     pos: Point,
     places: HashSet<Point>,
 }
-impl Tail {
-    fn new() -> Tail {
-        let mut tail = Tail {
+impl Knot {
+    fn new() -> Knot {
+        let mut knot = Knot {
             pos: Point::new(),
             places: HashSet::new(),
         };
-        tail.places.insert(tail.pos);
-        tail
+        knot.places.insert(knot.pos);
+        knot
     }
 
-    fn do_move(&mut self, pos: &Point) {
-        println!("Moving tail to: {:?}", pos);
-        self.pos.x = pos.x;
-        self.pos.y = pos.y;
+    fn do_relative_move(&mut self, pos: &Point) {
+        self.pos.x += pos.x;
+        self.pos.y += pos.y;
         self.places.insert(self.pos);
     }
 }
 
 struct Rope {
     head: Point,
-    tail: Tail,
+    knots: Vec<Knot>,
 }
 
 impl Rope {
-    fn new() -> Rope {
-        Rope {
+    fn new(knots: usize) -> Rope {
+        let mut rope = Rope {
             head: Point::new(),
-            tail: Tail::new(),
-        }
+            knots: Vec::new(),
+        };
+        (0..knots).for_each(|_x| rope.knots.push(Knot::new()));
+        rope
     }
+
     fn do_move(&mut self, move_: Move) {
         let mut expanded = VecDeque::new();
         match move_ {
@@ -69,7 +77,6 @@ impl Rope {
         }
 
         expanded.iter().for_each(|m| {
-            let old_head_position = self.head;
             //Move Head
             match m {
                 Move::Up(_) => self.head.y += 1,
@@ -77,24 +84,22 @@ impl Rope {
                 Move::Left(_) => self.head.x -= 1,
                 Move::Right(_) => self.head.x += 1,
             }
-
-            let dist = self.head.distance(&self.tail.pos);
-
-            if dist.x > 1 || dist.y > 1 {
-                self.tail.do_move(&old_head_position);
-            }
+            let mut prev_knot_pos = self.head;
+            self.knots.iter_mut().for_each(|knot| {
+                let abs = prev_knot_pos.abs_distance(&knot.pos);
+                if abs.x > 1 || abs.y > 1 {
+                    let dist = prev_knot_pos.move_points(&knot.pos);
+                    knot.do_relative_move(&dist);
+                }
+                prev_knot_pos = knot.pos;
+            })
         });
+        println!();
     }
 }
 
-fn main() {
-    let filename = "input";
-    let file = std::fs::File::open(filename).unwrap();
-    let reader = std::io::BufReader::new(file);
-
-    let mut rope = Rope::new();
-
-    for line in reader.lines().flatten() {
+fn trace_rope(rope: &mut Rope, lines: &[String]) -> usize {
+    for line in lines.iter() {
         let mut split = line.split_ascii_whitespace();
         let dir = split.next().unwrap();
         let steps = split.next().unwrap().parse::<usize>().unwrap();
@@ -107,39 +112,23 @@ fn main() {
         };
         rope.do_move(move_);
     }
-    println!("Tail visited {} positions", rope.tail.places.len());
+    rope.knots.last().unwrap().places.len()
 }
 
-#[test]
-fn test1() {
-    let mut rope = Rope::new();
-    rope.do_move(Move::Up(1));
-    assert_eq!(rope.head.y, 1);
+fn main() {
+    let filename = "input";
+    let file = std::fs::File::open(filename).unwrap();
+    let reader = std::io::BufReader::new(file);
+    let lines: Vec<String> = reader.lines().flatten().collect();
 
-    rope.do_move(Move::Down(1));
-    assert_eq!(rope.head.y, 0);
+    let mut rope = Rope::new(1);
+    let visited = trace_rope(&mut rope, &lines);
 
-    rope.do_move(Move::Right(1));
-    assert_eq!(rope.head.x, 1);
+    let mut rope = Rope::new(9);
+    let visited2 = trace_rope(&mut rope, &lines);
 
-    rope.do_move(Move::Left(1));
-    assert_eq!(rope.head.x, 0);
-}
-
-#[test]
-fn test2() {
-    let mut rope = Rope::new();
-    rope.do_move(Move::Up(5));
-    assert_eq!(rope.head.y, 5);
-
-    rope.do_move(Move::Down(2));
-    assert_eq!(rope.head.y, 3);
-
-    rope.do_move(Move::Right(20));
-    assert_eq!(rope.head.x, 20);
-
-    rope.do_move(Move::Left(15));
-    assert_eq!(rope.head.x, 5);
+    println!("Visited {}", visited);
+    println!("Visited {}", visited2);
 }
 
 // R 4
@@ -152,7 +141,7 @@ fn test2() {
 // R 2
 #[test]
 fn test_example() {
-    let mut rope = Rope::new();
+    let mut rope = Rope::new(1);
 
     rope.do_move(Move::Right(4));
     rope.do_move(Move::Up(4));
@@ -164,7 +153,34 @@ fn test_example() {
     rope.do_move(Move::Right(2));
     assert_eq!(rope.head.x, 2);
     assert_eq!(rope.head.y, 2);
-    assert_eq!(rope.tail.pos.x, 1);
-    assert_eq!(rope.tail.pos.y, 2);
-    assert_eq!(rope.tail.places.len(), 13);
+    assert_eq!(rope.knots.last().unwrap().pos.x, 1);
+    assert_eq!(rope.knots.last().unwrap().pos.y, 2);
+    assert_eq!(rope.knots.last().unwrap().places.len(), 13);
+}
+
+// R 5
+// U 8
+// L 8
+// D 3
+// R 17
+// D 10
+// L 25
+// U 20
+#[test]
+fn test_example2() {
+    let mut rope = Rope::new(9);
+
+    rope.do_move(Move::Right(5));
+    rope.do_move(Move::Up(8));
+    rope.do_move(Move::Left(8));
+    rope.do_move(Move::Down(3));
+    rope.do_move(Move::Right(17));
+    rope.do_move(Move::Down(10));
+    rope.do_move(Move::Left(25));
+    rope.do_move(Move::Up(20));
+    assert_eq!(rope.head.x, -11);
+    assert_eq!(rope.head.y, 15);
+    assert_eq!(rope.knots.last().unwrap().pos.x, -11);
+    assert_eq!(rope.knots.last().unwrap().pos.y, 6);
+    assert_eq!(rope.knots.last().unwrap().places.len(), 36);
 }
